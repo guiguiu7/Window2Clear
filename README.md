@@ -3,6 +3,9 @@
 一个轻量级的Windows桌面工具，用于控制窗口透明度、居中和抖动效果。
 基于C语言，调用Windows Api实现。
 
+## 点击链接直接下载，无需安装开箱即用
+https://github.com/iwill123/Window2Clear/releases/download/v0.2.0/Window2Clear_v0.2.0.exe
+
 ## 功能特性
 
 - 🔄 **透明度控制**: 通过热键快速调整任意窗口的透明度
