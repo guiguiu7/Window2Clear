@@ -18,6 +18,7 @@
 #define ID_HOTKEY_TRANSPARENCY_DOWN 2
 #define ID_HOTKEY_CENTER_WINDOW 3
 #define ID_HOTKEY_SHAKE_WINDOW 4
+#define ID_HOTKEY_HIDDEN_WINDOW 5
 #define CONFIG_FILE L".\\config.ini"
 #define MAX_PATH_LEN 260
 #define APP_VERSION L"v0.2.0"
@@ -37,10 +38,13 @@
 #define IDC_TRANSPARENCY_ENABLE 2012
 #define IDC_CENTER_ENABLE 2013
 #define IDC_SHAKE_ENABLE 2014
+#define IDC_HIDE_WINDOW_BUTTON 2015
+#define IDC_HIDE_WINDOW_DISPLAY 2016
 
 // 全局变量
 HWND g_hMainWnd = NULL;           // 主窗口句柄
 HWND g_hSettingsWnd = NULL;       // 设置窗口句柄
+HWND g_hHiddenWnd = NULL;         // 存储已隐藏的窗口句柄（用于恢复）
 NOTIFYICONDATA g_nid = { 0 };     // 系统托盘图标数据
 int g_transparencyStep = 10;      // 透明度调整步长（默认10%）
 
@@ -51,6 +55,7 @@ UINT g_transparencyDownModifiers = MOD_ALT;  // 透明度减少修饰键
 UINT g_transparencyDownKey = VK_RIGHT;       // 透明度减少按键
 BOOL g_enableTransparencyUp = TRUE;          // 是否启用透明度增加功能
 BOOL g_enableTransparencyDown = TRUE;        // 是否启用透明度减少功能
+BOOL g_enableHiddenWindow = TRUE;        // 是否启用透明度减少功能
 
 // 窗口居中热键设置
 UINT g_centerModifiers = MOD_CONTROL;        // 窗口居中修饰键
@@ -62,9 +67,13 @@ UINT g_shakeModifiers = MOD_ALT;             // 窗口抖动修饰键
 UINT g_shakeKey = VK_DOWN;                   // 窗口抖动按键
 BOOL g_enableShake = FALSE;                  // 是否启用窗口抖动功能
 
+// 隐藏窗口热键设置
+UINT g_hideWindowModifiers = MOD_ALT;        // 隐藏窗口修饰键
+UINT g_hideWindowKey = 0x58;                 // 窗口隐藏按键 (X)
+
 // 热键监听状态
 BOOL g_isListeningHotkey = FALSE;     // 是否正在监听热键输入
-int g_currentListeningType = 0;       // 当前监听类型: 0=无, 1=透明度增加, 2=透明度减少, 3=居中, 4=抖动
+int g_currentListeningType = 0;       // 当前监听类型: 0=无, 1=透明度增加, 2=透明度减少, 3=居中, 4=抖动, 5=隐藏
 HWND g_hCurrentButton = NULL;         // 当前正在设置的按钮句柄
 HWND g_hCurrentDisplay = NULL;        // 当前正在设置的显示框句柄
 DWORD g_listeningStartTime = 0;       // 监听开始时间（用于超时检测）
@@ -81,6 +90,7 @@ void UnregisterHotKeys(HWND hwnd);                // 注销全局热键
 void AdjustWindowTransparency(BOOL increase);     // 调整窗口透明度
 void CenterWindow();                              // 将窗口居中显示
 void ShakeWindow();                               // 窗口抖动效果
+void HiddenWindow();                              // 隐藏窗口
 void LoadConfig();                                // 从配置文件加载设置
 void SaveConfig();                                // 保存设置到配置文件
 HWND GetTopMostWindow();                          // 获取最上层窗口
@@ -180,6 +190,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         case ID_HOTKEY_SHAKE_WINDOW:
             ShakeWindow(); // 窗口抖动
             break;
+        case ID_HOTKEY_HIDDEN_WINDOW:
+            HiddenWindow(); // 隐藏窗口
+            break;
         }
         break;
 
@@ -214,8 +227,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 LRESULT CALLBACK SettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     static HWND hTransparencySlider, hSaveButton, hTransparencyLabel;
-    static HWND hTransparencyUpDisplay, hTransparencyDownDisplay, hCenterDisplay, hShakeDisplay;
-    static HWND hTransparencyUpButton, hTransparencyDownButton, hCenterButton, hShakeButton;
+    static HWND hTransparencyUpDisplay, hTransparencyDownDisplay, hCenterDisplay, hShakeDisplay, hHideWindowDisplay;
+    static HWND hTransparencyUpButton, hTransparencyDownButton, hCenterButton, hShakeButton, hHideWindowButton;
     static HWND hTransparencyEnable, hCenterEnable, hShakeEnable;
 
     switch (uMsg) {
@@ -338,6 +351,32 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
             180, yPos, 50, 20,
             hwnd, (HMENU)IDC_SHAKE_BUTTON, GetModuleHandle(NULL), NULL);
+
+        yPos += 40;
+
+        // 隐藏窗口热键
+        CreateWindow(L"STATIC", L"隐藏窗口:",
+                     WS_VISIBLE | WS_CHILD,
+                     30, yPos, 80, 20,  // y轴位置偏移30，避免与上面元素重叠
+                     hwnd, NULL, GetModuleHandle(NULL), NULL);
+
+        yPos += 30;
+
+        // 热键显示编辑框
+        hHideWindowDisplay = CreateWindow(L"EDIT", L"",
+                                          WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL | ES_READONLY,
+                                          30, yPos, 140, 20,
+                                          hwnd, (HMENU)IDC_HIDE_WINDOW_DISPLAY, GetModuleHandle(NULL), NULL);
+        wchar_t* word = GetModifierName(g_hideWindowModifiers);
+        // 设置当前热键显示
+        swprintf(keyText, 256, L"%s+%s", GetModifierName(g_hideWindowModifiers), GetKeyName(g_hideWindowKey));
+        SetWindowText(hHideWindowDisplay, keyText);
+
+        // 设置按钮
+        hHideWindowButton = CreateWindow(L"BUTTON", L"设置",
+                                         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+                                         180, yPos, 50, 20,
+                                         hwnd, (HMENU)IDC_HIDE_WINDOW_BUTTON, GetModuleHandle(NULL), NULL);
 
         yPos += 40;
 
@@ -486,6 +525,31 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             }
             break;
         }
+        case IDC_HIDE_WINDOW_BUTTON:
+        {
+            if (g_isListeningHotkey && g_currentListeningType == 5) {
+                g_isListeningHotkey = FALSE;
+                g_currentListeningType = 0;
+                SetWindowText(hHideWindowButton, L"设置");
+                // 恢复原来的热键显示
+                wchar_t keyText[256];
+                swprintf(keyText, 256, L"%s+%s", GetModifierName(g_hideWindowModifiers), GetKeyName(g_hideWindowKey));
+                SetWindowText(hHideWindowDisplay, keyText);
+                ReleaseCapture();
+            }
+            else {
+                g_isListeningHotkey = TRUE;
+                g_currentListeningType = 5;
+                g_hCurrentButton = hHideWindowButton;
+                g_hCurrentDisplay = hHideWindowDisplay;
+                g_listeningStartTime = GetTickCount();
+                SetWindowText(hHideWindowButton, L"取消");
+                SetWindowText(hHideWindowDisplay, L"请按下组合键...");
+                SetFocus(hwnd);
+                // SetCapture(hwnd);
+            }
+            break;
+        }
         case IDC_TRANSPARENCY_ENABLE:
         {
             BOOL transparencyEnabled = (SendMessage(hTransparencyEnable, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -587,6 +651,9 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                     g_shakeModifiers = modifiers;
                     g_shakeKey = (UINT)wParam;
                     break;
+                case 5: // 隐藏窗口
+                    g_hideWindowModifiers = modifiers;
+                    g_hideWindowKey = (UINT)wParam;
                 }
 
                 // 显示设置的热键
@@ -733,7 +800,7 @@ void ShowSettingsWindow()
 
     // 计算窗口居中位置
     int windowWidth = 380;
-    int windowHeight = 420;
+    int windowHeight = 520;
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenWidth - windowWidth) / 2;
@@ -784,6 +851,11 @@ void RegisterHotKeys(HWND hwnd)
             MessageBox(hwnd, L"窗口抖动热键注册失败，可能与其他程序冲突", L"警告", MB_OK | MB_ICONWARNING);
         }
     }
+    if (g_enableHiddenWindow) {
+        if (!RegisterHotKey(hwnd, ID_HOTKEY_HIDDEN_WINDOW, g_hideWindowModifiers, g_hideWindowKey)) {
+            MessageBox(hwnd, L"隐藏窗口热键注册失败，可能与其他程序冲突", L"警告", MB_OK | MB_ICONWARNING);
+        }
+    }
 }
 
 // 注销全局热键
@@ -793,6 +865,7 @@ void UnregisterHotKeys(HWND hwnd)
     UnregisterHotKey(hwnd, ID_HOTKEY_TRANSPARENCY_DOWN);
     UnregisterHotKey(hwnd, ID_HOTKEY_CENTER_WINDOW);
     UnregisterHotKey(hwnd, ID_HOTKEY_SHAKE_WINDOW);
+    UnregisterHotKey(hwnd, ID_HOTKEY_HIDDEN_WINDOW);
 }
 
 // 调整窗口透明度
@@ -917,6 +990,24 @@ void ShakeWindow()
     SetWindowPos(hwnd, NULL, originalX, originalY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
+// 隐藏窗口
+void HiddenWindow() {
+    HWND hWnd = GetTopMostWindow();
+    // 排除自身窗口（主窗口、设置窗口），避免误隐藏
+    if (!hWnd || hWnd == g_hMainWnd || hWnd == g_hSettingsWnd) {
+        return;
+    }
+
+    // 切换逻辑：已隐藏则恢复，未隐藏则隐藏
+    if (hWnd == g_hHiddenWnd && IsWindowVisible(hWnd) == FALSE) {
+        ShowWindow(hWnd, SW_RESTORE); // 恢复显示
+        g_hHiddenWnd = NULL;
+    } else {
+        ShowWindow(hWnd, SW_HIDE);    // 隐藏窗口
+        g_hHiddenWnd = hWnd;          // 记录隐藏的窗口
+    }
+}
+
 // 加载配置
 void LoadConfig()
 {
@@ -969,6 +1060,8 @@ void SaveConfig()
     WritePrivateProfileString(L"Hotkeys", L"ShakeModifiers", value, CONFIG_FILE);
     swprintf(value, 32, L"%d", g_shakeKey);
     WritePrivateProfileString(L"Hotkeys", L"ShakeKey", value, CONFIG_FILE);
+    swprintf(value, 32, L"%d", g_hideWindowKey);
+    WritePrivateProfileString(L"Hotkeys", L"HiddenKey", value, CONFIG_FILE);
 
     // 保存热键开关状态
     swprintf(value, 32, L"%d", g_enableTransparencyUp ? 1 : 0);
