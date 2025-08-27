@@ -162,6 +162,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
+    // 恢复隐藏窗口
+    if (g_hHiddenWnd != NULL) {
+        ShowWindow(g_hHiddenWnd, SW_RESTORE); // 恢复显示
+    }
     // 清理资源
     UnregisterHotKeys(g_hMainWnd);
     RemoveTrayIcon();
@@ -997,12 +1001,11 @@ void HiddenWindow() {
     if (!hWnd || hWnd == g_hMainWnd || hWnd == g_hSettingsWnd) {
         return;
     }
-
-    // 切换逻辑：已隐藏则恢复，未隐藏则隐藏
-    if (hWnd == g_hHiddenWnd && IsWindowVisible(hWnd) == FALSE) {
-        ShowWindow(hWnd, SW_RESTORE); // 恢复显示
+    if (g_hHiddenWnd != NULL) {
+        ShowWindow(g_hHiddenWnd, SW_RESTORE); // 恢复显示
         g_hHiddenWnd = NULL;
-    } else {
+        return;
+    }else {
         ShowWindow(hWnd, SW_HIDE);    // 隐藏窗口
         g_hHiddenWnd = hWnd;          // 记录隐藏的窗口
     }
