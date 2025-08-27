@@ -152,7 +152,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 显示启动提示
     wchar_t startupMsg[500];
-    swprintf_s(startupMsg, 500, L"Window2Clear %s 已启动！\n\n默认热键：\n- Alt+←/→ 调整窗口透明度\n- Ctrl+数字键5 窗口居中（需开启）\n- Alt+↓ 窗口抖动（需开启）\n\n右键点击托盘图标进行设置", APP_VERSION);
+    swprintf_s(startupMsg, 500, L"Window2Clear %s 已启动！\n\n默认热键：\n- Alt+←/→ 调整窗口透明度\n- Ctrl+数字键5 窗口居中（需开启）\n- Alt+↓ 窗口抖动（需开启）\n- Alt+X 隐藏窗口/恢复窗口\n\n右键点击托盘图标进行设置", APP_VERSION);
     MessageBox(NULL, startupMsg, L"Window2Clear 启动成功", MB_OK | MB_ICONINFORMATION);
 
     // 消息循环
@@ -1022,6 +1022,8 @@ void LoadConfig()
     g_centerKey = GetPrivateProfileInt(L"Hotkeys", L"CenterKey", VK_NUMPAD5, CONFIG_FILE);
     g_shakeModifiers = GetPrivateProfileInt(L"Hotkeys", L"ShakeModifiers", MOD_ALT, CONFIG_FILE);
     g_shakeKey = GetPrivateProfileInt(L"Hotkeys", L"ShakeKey", VK_DOWN, CONFIG_FILE);
+    g_hideWindowModifiers = GetPrivateProfileInt(L"Hotkeys", L"HiddenModifiers", MOD_ALT, CONFIG_FILE);
+    g_hideWindowKey = GetPrivateProfileIntW(L"Hotkeys", L"HiddenKey", 0x58, CONFIG_FILE);
 
     // 加载热键开关状态
     g_enableTransparencyUp = GetPrivateProfileInt(L"Switches", L"EnableTransparencyUp", 1, CONFIG_FILE);
@@ -1060,6 +1062,8 @@ void SaveConfig()
     WritePrivateProfileString(L"Hotkeys", L"ShakeModifiers", value, CONFIG_FILE);
     swprintf(value, 32, L"%d", g_shakeKey);
     WritePrivateProfileString(L"Hotkeys", L"ShakeKey", value, CONFIG_FILE);
+    swprintf(value, 32, L"%d", g_hideWindowModifiers);
+    WritePrivateProfileString(L"Hotkeys", L"HiddenModifiers", value, CONFIG_FILE);
     swprintf(value, 32, L"%d", g_hideWindowKey);
     WritePrivateProfileString(L"Hotkeys", L"HiddenKey", value, CONFIG_FILE);
 
